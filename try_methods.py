@@ -16,7 +16,7 @@ COLOR = (6, 7, 139)
 
 pygame.font.init()
 FONT = pygame.font.SysFont("Arial", 23, bold=True)
-score1 = 0
+SCORE = 0
 board = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], #1
     [0, 6, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 6, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 0], #2
@@ -59,6 +59,17 @@ FLICK = False
 
 PLAYER1_IMAGES = [pygame.transform.scale(pygame.image.load("p1_1.png"), (40, 40)), pygame.transform.scale(pygame.image.load("p1_2.png"), (40, 40)),
                   pygame.transform.scale(pygame.image.load("p1_3.png"), (40, 40)), pygame.transform.scale(pygame.image.load("p1_4.png"), (40, 40))]
+orange_ghost = pygame.transform.scale(pygame.image.load("orange.png"), (40, 40))
+red_ghost = pygame.transform.scale(pygame.image.load("red.png"), (40, 40))
+pink_ghost = pygame.transform.scale(pygame.image.load("pink.png"), (40, 40))
+teal_ghost = pygame.transform.scale(pygame.image.load("teal.png"), (40, 40))
+
+powerup = False
+power_cnt = 0
+eaten_ghosts = [False, False, False, False]
+moving = False
+startup_counter = 0
+lives = 3
 
 def draw_board():
     num1 = (HEIGHT // 33)
@@ -66,23 +77,23 @@ def draw_board():
     for i in range(len(board)):
         for j in range(len(board[i])):
             if board[i][j] == 1:
-                pygame.draw.line(WINDOW, COLOR, (j * num2, i * num1 + (0.5 * num1)), (j * num2 + num2, i * num1 + (0.5 *num1)), 10)
+                pygame.draw.line(WINDOW, COLOR, (j * num2, i * num1 + (0.5 * num1)), (j * num2 + num2, i * num1 + (0.5 *num1)), 4)
             if board[i][j] == 2:
                 pygame.draw.circle(WINDOW, 'white', (j * num2 +(0.5*num2), i * num1 + (0.5 * num1)), 4)
             if board[i][j] == 3 and not FLICK:
-                pygame.draw.circle(WINDOW, 'white', (j * num2 + (0.5 * num2), i * num1 + (0.5 * num1)), 10)
+                pygame.draw.circle(WINDOW, 'white', (j * num2 + (0.5 * num2), i * num1 + (0.5 * num1)), 8)
             if board[i][j] == 4:
-                pygame.draw.line(WINDOW, COLOR, (j * num2 + (0.5 * num2), i * num1), (j * num2 + (0.5 * num2), i * num1 + num1), 10)
+                pygame.draw.line(WINDOW, COLOR, (j * num2 + (0.5 * num2), i * num1), (j * num2 + (0.5 * num2), i * num1 + num1), 4)
             if board[i][j] == 5:
-                pygame.draw.arc(WINDOW, COLOR, [(j*num2 - (num2*0.5)), (i * num1 +(0.5 * num1)), num2, num1,], 0, PI/2, 10)
+                pygame.draw.arc(WINDOW, COLOR, [(j*num2 - (num2*0.5)), (i * num1 +(0.5 * num1)), num2, num1,], 0, PI/2, 4)
             if board[i][j] == 6:
-                pygame.draw.arc(WINDOW, COLOR, [(j * num2 + (num2 * 0.5)), (i * num1 + (0.5 * num1)), num2, num1], PI /2, PI, 10)
+                pygame.draw.arc(WINDOW, COLOR, [(j * num2 + (num2 * 0.5)), (i * num1 + (0.5 * num1)), num2, num1], PI /2, PI, 4)
             if board[i][j] == 7:
-                pygame.draw.arc(WINDOW, COLOR, [(j * num2 + (num2 * 0.5)), (i * num1 - (0.4 * num1)), num2, num1], PI, 3*PI/2, 10)
+                pygame.draw.arc(WINDOW, COLOR, [(j * num2 + (num2 * 0.5)), (i * num1 - (0.4 * num1)), num2, num1], PI, 3*PI/2, 4)
             if board[i][j] == 8:
-                pygame.draw.arc(WINDOW, COLOR, [(j * num2 - (num2 * 0.4) - 2), (i * num1 - (0.4 * num1)), num2, num1], 3*PI /2, 2*PI, 10)
+                pygame.draw.arc(WINDOW, COLOR, [(j * num2 - (num2 * 0.4) - 2), (i * num1 - (0.4 * num1)), num2, num1], 3*PI /2, 2*PI, 4)
             if board[i][j] == 9:
-                pygame.draw.line(WINDOW, 'white', (j * num2, i * num1 + (0.5*num2)), (j * num2 + num2, i * num1 + (0.5* num1)), 10)
+                pygame.draw.line(WINDOW, 'white', (j * num2, i * num1 + (0.5*num2)), (j * num2 + num2, i * num1 + (0.5* num1)), 4)
 
 
 def draw_player1():
@@ -96,13 +107,44 @@ def draw_player1():
     elif DIRECTION == 3:
         WINDOW.blit(pygame.transform.rotate(PLAYER1_IMAGES[CNT // 5], 270), (PLAYER_X, PLAYER_Y))
 
+def draw_additions():
+    WINDOW.blit(FONT.render(f"score: {SCORE}", True, 'white'), (15, 10))
+    for i in range(lives):
+        WINDOW.blit(pygame.transform.scale(PLAYER1_IMAGES[0], (20, 20)), (50 + i * 30, 770))
+    if powerup:
+        pygame.draw.circle(WINDOW, 'blue', (155, 780), 15)
+
+def can_move(center_x, center_y):
+    num1 = HEIGHT // 33
+    num2 = WIDTH // 29
+    row = center_y // num1
+    col = center_x // num2
+
+    return board[row][col] not in [1, 4, 5, 6, 7, 8, 9]
+
+
+def check_points(x, y, powerup, power_cnt, eaten_ghosts):
+    global SCORE
+    num1 = HEIGHT // 33
+    num2 = WIDTH // 29
+    if board[y // num1][x // num2] == 2:
+        SCORE += 10
+        board[y // num1][x // num2] = 0
+    if board[y // num1][x // num2] == 3:
+        SCORE += 50
+        board[y // num1][x // num2] = 0
+        powerup = True
+        power_cnt = 0
+        eaten_ghosts = [False, False, False, False]
+    return powerup, power_cnt, eaten_ghosts
 
 
 def game_play():
-    global PLAYER_X, PLAYER_Y, score, PLAYER_VEL, CNT, DIRECTION, FLICK
+    global PLAYER_X, PLAYER_Y, SCORE, PLAYER_VEL, CNT, DIRECTION, FLICK, moving, powerup, power_cnt, eaten_ghosts, startup_counter
     run = True
     clock = pygame.time.Clock()
 
+    requested_direction = DIRECTION
     while run:
         clock.tick(60)
         if CNT < 19:
@@ -116,26 +158,53 @@ def game_play():
             if event.type == pygame.QUIT:
                 run = False
                 break
+        if powerup and power_cnt < 600:
+            power_cnt += 1
+        elif powerup and power_cnt >= 600:
+            power_cnt = 0
+            powerup = False
+            eaten_ghosts = [False, False, False, False]
+        if startup_counter < 60:
+            moving = False
+            startup_counter += 1
+        else:
+            moving = True
+
         WINDOW.fill("black")
         draw_board()
         draw_player1()
-        center_x, center_y = PLAYER_X + 21, PLAYER_Y + 21
+        draw_additions()
 
+        if moving:
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_RIGHT]:
+                requested_direction = 0
+            elif keys[pygame.K_LEFT]:
+                requested_direction = 1
+            elif keys[pygame.K_UP]:
+                requested_direction = 2
+            elif keys[pygame.K_DOWN]:
+                requested_direction = 3
 
+            if requested_direction == 0 and can_move(PLAYER_X + PLAYER_VEL + 20, PLAYER_Y + 20):
+                DIRECTION = 0
+            elif requested_direction == 1 and can_move(PLAYER_X - PLAYER_VEL + 20, PLAYER_Y + 20):
+                DIRECTION = 1
+            elif requested_direction == 2 and can_move(PLAYER_X + 20, PLAYER_Y - PLAYER_VEL + 20):
+                DIRECTION = 2
+            elif requested_direction == 3 and can_move(PLAYER_X + 20, PLAYER_Y + PLAYER_VEL + 20):
+                DIRECTION = 3
 
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT]:
-            PLAYER_X -= PLAYER_VEL
-            DIRECTION = 1
-        if keys[pygame.K_RIGHT]:
-            PLAYER_X += PLAYER_VEL
-            DIRECTION = 0
-        if keys[pygame.K_UP]:
-            PLAYER_Y -= PLAYER_VEL
-            DIRECTION = 2
-        if keys[pygame.K_DOWN]:
-            PLAYER_Y += PLAYER_VEL
-            DIRECTION = 3
+            if DIRECTION == 0 and can_move(PLAYER_X + PLAYER_VEL + 20, PLAYER_Y + 20):
+                PLAYER_X += PLAYER_VEL
+            elif DIRECTION == 1 and can_move(PLAYER_X - PLAYER_VEL + 20, PLAYER_Y + 20):
+                PLAYER_X -= PLAYER_VEL
+            elif DIRECTION == 2 and can_move(PLAYER_X + 20, PLAYER_Y - PLAYER_VEL + 20):
+                PLAYER_Y -= PLAYER_VEL
+            elif DIRECTION == 3 and can_move(PLAYER_X + 20, PLAYER_Y + PLAYER_VEL + 20):
+                PLAYER_Y += PLAYER_VEL
+        powerup, power_cnt, eaten_ghosts = check_points(PLAYER_X + 20, PLAYER_Y + 20, powerup, power_cnt, eaten_ghosts)
+
         pygame.display.update()
 
     pygame.quit()
