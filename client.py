@@ -29,6 +29,7 @@ sign_up_password_var = None
 aes_key = None
 server_public_key = None
 PLAYER_ID = None
+waiting_root = None
 
 positions_lock = threading.Lock()
 
@@ -70,22 +71,17 @@ board = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], #33
 ]
 
-PLAYER1_IMAGES = [pygame.transform.scale(pygame.image.load("p1_1.png"), (40, 40)), pygame.transform.scale(pygame.image.load("p1_2.png"), (40, 40)),
-                  pygame.transform.scale(pygame.image.load("p1_3.png"), (40, 40)), pygame.transform.scale(pygame.image.load("p1_4.png"), (40, 40))]
-PLAYER2_IMAGES = [pygame.transform.scale(pygame.image.load("p2_1.png"), (40, 40)), pygame.transform.scale(pygame.image.load("p2_2.png"), (40, 40)),
-                  pygame.transform.scale(pygame.image.load("p2_3.png"), (40, 40)), pygame.transform.scale(pygame.image.load("p2_4.png"), (40, 40))]
-orange_img = pygame.transform.scale(pygame.image.load("orange.png"), (50, 50))
-red_img = pygame.transform.scale(pygame.image.load("red.png"), (50, 50))
-pink_img = pygame.transform.scale(pygame.image.load("pink.png"), (50, 50))
-teal_img = pygame.transform.scale(pygame.image.load("teal.png"), (50, 50))
-vulnerable_img = pygame.transform.scale(pygame.image.load("vulnerable.png"), (40, 40))
-dead_img = pygame.transform.scale(pygame.image.load("dead.png"), (50, 50))
+PLAYER1_IMAGES = []
+PLAYER2_IMAGES = []
+orange_img = None
+red_img = None
+pink_img = None
+teal_img = None
+vulnerable_img = None
+dead_img = None
 
 WIDTH, HEIGHT = 775, 800
-WINDOW = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("pacman")
-pygame.font.init()
-FONT = pygame.font.SysFont("Ariel", 24)
+WINDOW = None
 PI = math.pi
 COLOR = (6, 7, 139)
 FLICK = False
@@ -144,7 +140,7 @@ def listen_server():
                 print("Waiting for second player")
             elif status == "game_start":
                 PLAYER_ID = msg["player_id"]
-                waiting_root.after(0,  start_game)
+                login_root.after(0, close_tk_and_start_game)
             elif status == "position":
                 with positions_lock:
                     GAME_POSITIONS = msg["position"]
@@ -208,14 +204,41 @@ def waiting_room_screen():
     waiting_root = tk.Toplevel()
     waiting_root.geometry("400x200")
     waiting_root.title("Waiting Room")
-    ttk.Label(waiting_root,text="Waiting for second player...").pack(pady=50)
+    waiting_root.configure(bg="blue")
+    tk.Label(waiting_root,text="Waiting for second player...", font=("Fixedsys", 15, "bold"), bg="yellow").pack(pady=50)
     send_encrypted({"action": "join_game"})
 
+def close_tk_and_start_game():
+    global waiting_root
+    if waiting_root and waiting_root.winfo_exists():
+        waiting_root.destroy()
+    login_root.destroy()
+    start_game()
 
 def start_game():
-    global CNT, DIRECTION, FLICK
-    FONT = pygame.font.SysFont("Arial", 22, bold=True)
-    BIG_FONT = pygame.font.SysFont("Arial", 40, bold=True)
+    global CNT, DIRECTION, WINDOW, FLICK, PLAYER1_IMAGES, PLAYER2_IMAGES, orange_img, red_img, pink_img, teal_img, vulnerable_img, dead_img
+    pygame.init()
+    pygame.font.init()
+
+    WINDOW = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("pacman")
+    FONT = pygame.font.SysFont("Fixedsys", 22, bold=True)
+    BIG_FONT = pygame.font.SysFont("Fixedsys", 40, bold=True)
+    PLAYER1_IMAGES = [pygame.transform.scale(pygame.image.load("p1_1.png"), (40, 40)),
+                      pygame.transform.scale(pygame.image.load("p1_2.png"), (40, 40)),
+                      pygame.transform.scale(pygame.image.load("p1_3.png"), (40, 40)),
+                      pygame.transform.scale(pygame.image.load("p1_4.png"), (40, 40))]
+    PLAYER2_IMAGES = [pygame.transform.scale(pygame.image.load("p2_1.png"), (40, 40)),
+                      pygame.transform.scale(pygame.image.load("p2_2.png"), (40, 40)),
+                      pygame.transform.scale(pygame.image.load("p2_3.png"), (40, 40)),
+                      pygame.transform.scale(pygame.image.load("p2_4.png"), (40, 40))]
+    orange_img = pygame.transform.scale(pygame.image.load("orange.png"), (50, 50))
+    red_img = pygame.transform.scale(pygame.image.load("red.png"), (50, 50))
+    pink_img = pygame.transform.scale(pygame.image.load("pink.png"), (50, 50))
+    teal_img = pygame.transform.scale(pygame.image.load("teal.png"), (50, 50))
+    vulnerable_img = pygame.transform.scale(pygame.image.load("vulnerable.png"), (40, 40))
+    dead_img = pygame.transform.scale(pygame.image.load("dead.png"), (50, 50))
+
     current_dir = None
     run = True
     clock = pygame.time.Clock()
@@ -360,41 +383,43 @@ def open_signup():
     signup_root = tk.Toplevel()
     signup_root.geometry('300x250')
     signup_root.title('Sign Up')
-    ttk.Label(signup_root,text='Username').pack()
+    signup_root.configure(bg="blue")
+
+    tk.Label(signup_root,text='Username', font=("Fixedsys", 15, "bold"), bg="yellow").pack(pady=10)
 
     sign_up_username_var = tk.StringVar()
-    ttk.Entry(signup_root, textvariable=sign_up_username_var).pack()
+    ttk.Entry(signup_root, textvariable=sign_up_username_var).pack(pady=5)
 
-    ttk.Label(signup_root,text='Password').pack()
+    tk.Label(signup_root,text='Password', font=("Fixedsys", 15, "bold"), bg="pink").pack(pady=10)
 
     sign_up_password_var = tk.StringVar()
-    ttk.Entry(signup_root, show="*", textvariable=sign_up_password_var).pack()
+    ttk.Entry(signup_root, show="*", textvariable=sign_up_password_var).pack(pady=5)
 
-    tk.Button(signup_root, text="Register", command=signup).pack()
+    tk.Button(signup_root, text="Register", font=("Fixedsys", 10, "bold"), command=signup).pack(pady=10)
+
 
 
 
 def opening_screen():
     global username_var, password_var, status_label, login_root
     login_root = tk.Tk()
-    login_root.geometry('775x800')
+    login_root.geometry('400x400')
     login_root.title('start game')
+    login_root.configure(bg="blue")
 
-    ttk.Label(login_root, text='Username:').pack(pady=2)
+    tk.Label(login_root, text='TWO PLAYER PAC-MAN', font=("Fixedsys", 20, "bold"), fg="yellow", bg="blue").pack(pady=20)
+
+    tk.Label(login_root, text='Username:', font=("Fixedsys", 15, "bold"), bg="pink").pack(pady=20)
     username_var = tk.StringVar()
-    ttk.Entry(login_root, textvariable=username_var).pack(pady=5)
+    ttk.Entry(login_root, width=27, textvariable=username_var).pack(pady=2)
 
-    ttk.Label(login_root, text='Password:').pack(pady=2)
-
+    tk.Label(login_root, text='Password:', font=("Fixedsys", 15, "bold"), bg="yellow").pack(pady=15)
     password_var = tk.StringVar()
-    ttk.Entry(login_root, show='*', textvariable=password_var).pack(pady=5)
+    ttk.Entry(login_root, width=27, show='*', textvariable=password_var).pack(pady=10)
 
-    status_label = ttk.Label(login_root, text='')
-    status_label.pack()
+    tk.Button(login_root, width=18, text="Login", font=("Fixedsys", 10, "bold"), command=try_login).pack(pady=7)
 
-    tk.Button(login_root, text="Login", command=try_login).pack(pady=10)
-
-    tk.Button(login_root, text="Sign Up", command=open_signup).pack(pady=5)
+    tk.Button(login_root, width=18, text="Sign Up", font=("Fixedsys", 10, "bold"), command=open_signup).pack(pady=7)
 
     threading.Thread(target=listen_server,daemon=True).start()
     request_public_key()

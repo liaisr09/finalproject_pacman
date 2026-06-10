@@ -15,6 +15,7 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 import time
 import struct
+import copy
 
 USERS_FILE = "users.pkl"
 PEPPER_FILE = "pepper.bin"
@@ -106,6 +107,8 @@ GAME_POSITIONS = {
         "orange": {"x": 415, "y": 340}
 }}
 spawn_positions = [(365, 340), (315, 340), (365, 340), (415, 340)]
+powerup_taken = 0
+INITIAL_BOARD = copy.deepcopy(board)
 
 class Ghost:
     def __init__(self, x, y, id, direction, is_dead, in_box, released):
@@ -156,8 +159,8 @@ class Ghost:
     def move(self):
         num1 = HEIGHT // 33
         num2 = WIDTH // 29
-        row = (self.y + 4) // num1
-        col = (self.x + 4) // num2
+        row = self.center_y // num1
+        col = self.center_x // num2
         if not self.released:
             return
         if self.is_dead:
@@ -206,6 +209,11 @@ class Ghost:
         if (is_at_center_x and is_at_center_y) or is_blocked:
             self.turns = self.check_turns()
             best_direction = self.direction
+            if not self.turns[best_direction]:
+                for d in range(4):
+                    if self.turns[d]:
+                        best_direction = d
+                        break
             min_distance = float('inf')
             for d in range(4):
                 if self.turns[d]:
@@ -222,11 +230,6 @@ class Ghost:
                         min_distance = distance
                         best_direction = d
 
-            if not self.check_turns()[best_direction]:
-                for d in range(4):
-                    if self.check_turns()[d]:
-                        best_direction = d
-                        break
             self.direction = best_direction
 
         turns_available = self.check_turns()
@@ -275,18 +278,20 @@ def recv_packet(sock):
     return pickle.loads(payload)
 
 def check_ghost_collisions(which_player):
-    global GAME_POSITIONS
+    global GAME_POSITIONS, powerup_taken
     px = GAME_POSITIONS[which_player + "_x"]
     py = GAME_POSITIONS[which_player + "_y"]
 
     for ghost in ghosts_list:
-        distance = math.sqrt(((px + 20) - (ghost.x + 20)) ** 2 + ((py + 20) - (ghost.y + 20)) ** 2)
-        if distance < 20:
+        distance = math.sqrt(((px + 20) - (ghost.x + 25)) ** 2 + ((py + 20) - (ghost.y + 25)) ** 2)
+        if distance < 30:
             if GAME_POSITIONS.get("powerup"):
                 if not ghost.is_dead:
                     ghost.is_dead = True
-                    GAME_POSITIONS[which_player + "_score"] += 200
+                    powerup_taken += 1
+                    GAME_POSITIONS[which_player + "_score"] += 200 * powerup_taken
             else:
+                powerup_taken = 0
                 GAME_POSITIONS[which_player + "_lives"] -= 1
                 reset_positions_server(which_player)
                 check_game_status()
@@ -310,10 +315,8 @@ def reset_positions_server(player_prefix=None):
     for ghost in ghosts_list:
         ghost.center_x = ghost.x + 22
         ghost.center_y = ghost.y + 22
-    if player_prefix == "p1" or player_prefix is None:
-        GAME_POSITIONS["p1_x"], GAME_POSITIONS["p1_y"] = 414, 431
-    if player_prefix == "p2" or player_prefix is None:
-        GAME_POSITIONS["p2_x"], GAME_POSITIONS["p2_y"] = 334, 431
+    GAME_POSITIONS["p1_x"], GAME_POSITIONS["p1_y"] = 414, 431
+    GAME_POSITIONS["p2_x"], GAME_POSITIONS["p2_y"] = 334, 431
 
 
 def check_points(x, y, which_player):
@@ -533,8 +536,35 @@ def handle_request(request, clt_sock):
             center_x = GAME_POSITIONS[which_player + "_x"] + 22
             center_y = GAME_POSITIONS[which_player + "_y"] + 22
             check_points(center_x, center_y, which_player)
-    elif todo == "update":
-        return
+
+def reset_game():
+    global board, TOTAL_POINTS_ON_BOARD, GAME_POSITIONS
+    global POWERUP_COUNTER, GHOST_RELEASE_COUNTER
+
+    board = copy.deepcopy(INITIAL_BOARD)
+    TOTAL_POINTS_ON_BOARD = count_initial_points()
+    POWERUP_COUNTER = 0
+    GHOST_RELEASE_COUNTER = 0
+    GAME_POSITIONS = {
+        "p1_x": 414, "p1_y": 431, "p1_score": 0, "p1_lives": 3, "p1_dir": 0,
+        "p2_x": 334, "p2_y": 431, "p2_score": 0, "p2_lives": 3, "p2_dir": 0,
+        "game_over": False, "winner": None, "reason": "", "powerup": False,
+        "ghosts": {
+            "red": {"x": 365, "y": 275},
+            "teal": {"x": 315, "y": 340},
+            "pink": {"x": 365, "y": 340},
+            "orange": {"x": 415, "y": 340}}}
+    ghosts_list[0].x, ghosts_list[0].y = 365, 275
+    ghosts_list[1].x, ghosts_list[1].y = 315, 340
+    ghosts_list[2].x, ghosts_list[2].y = 365, 340
+    ghosts_list[3].x, ghosts_list[3].y = 415, 340
+    for i, ghost in enumerate(ghosts_list):
+        ghost.is_dead = False
+        ghost.direction = 0 if i == 0 else 2
+        ghost.in_box = (i > 0)
+        ghost.released = (i == 0)
+        ghost.center_x = ghost.x + 22
+        ghost.center_y = ghost.y + 22
 
 
 def game_loop():
@@ -545,7 +575,11 @@ def game_loop():
         with game_lock:
             if len(PLAYERS) < 2:
                 continue
+            if not GAME_POSITIONS["game_over"]:
+                check_game_status()
             if GAME_POSITIONS["game_over"]:
+                time.sleep(5)
+                reset_game()
                 continue
 
             GHOST_RELEASE_COUNTER += 1
@@ -561,6 +595,9 @@ def game_loop():
                 if POWERUP_COUNTER >= 600:
                     GAME_POSITIONS["powerup"] = False
                     POWERUP_COUNTER = 0
+
+            check_ghost_collisions("p1")
+            check_ghost_collisions("p2")
 
             for ghost in ghosts_list:
                 ghost.update_target_and_move()
@@ -620,7 +657,7 @@ def handle_client(clt_sock):
 def main():
     print("Server started")
     srv_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    srv_sock.bind(("0.0.0.0", 65432))
+    srv_sock.bind(("192.168.1.125", 65432))
     srv_sock.listen(10)
     threading.Thread(target=game_loop, daemon=True).start()
     while True:
